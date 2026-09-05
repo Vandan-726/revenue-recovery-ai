@@ -16,22 +16,110 @@ export default function RecoveryDetail() {
   const detail = useGetRecovery(id, { query: { refetchInterval: 3000 } as any });
   const retry = useRetryRecovery({ mutation: { onSuccess: () => { void detail.refetch(); toast({ title: 'Retry queued', description: 'The recovery attempt was added to the API audit trail.' }); }, onError: () => toast({ title: 'Retry unavailable', description: 'The API could not queue this recovery.' }) } });
   const [copied, setCopied] = useState(false);
-  if (detail.isLoading) return <div className="page-enter mx-auto max-w-[1220px]"><Skeleton className="h-96" /></div>;
-  if (detail.isError || !detail.data) return <div className="page-enter mx-auto max-w-[720px]"><EmptyState title="Recovery not found" description="This record may have been removed or the API is unavailable." action={<Button variant="secondary" onClick={() => setLocation('/recoveries')}><ArrowLeft size={14} /> Back to recoveries</Button>} /></div>;
+  if (detail.isLoading) return <div className="page-enter mx-auto max-w-[1220px] w-full min-w-0 overflow-x-hidden"><Skeleton className="h-96" /></div>;
+  if (detail.isError || !detail.data) return <div className="page-enter mx-auto max-w-[720px] w-full min-w-0 overflow-x-hidden"><EmptyState title="Recovery not found" description="This record may have been removed or the API is unavailable." action={<Button variant="secondary" onClick={() => setLocation('/recoveries')}><ArrowLeft size={14} /> Back to recoveries</Button>} /></div>;
   const record = detail.data;
   const copyId = () => { navigator.clipboard?.writeText(record.payment_id); setCopied(true); toast({ title: 'Payment ID copied', description: record.payment_id }); };
-  return <div className="page-enter mx-auto max-w-[1220px]">
+  return <div className="page-enter mx-auto max-w-[1220px] w-full min-w-0 overflow-x-hidden">
     <Link href="/recoveries" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-primary"><ArrowLeft size={15} /> Back to recoveries</Link>
-    <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-3 flex items-center gap-2"><span className="eyebrow text-primary">Recovery record</span><span className="font-mono text-[10px] text-muted-foreground">/ {record.id}</span></div><h1 className="text-[30px] font-bold tracking-[-.04em] sm:text-[38px]">{customerLabel(record)}<span className="text-primary">.</span></h1><p className="mt-2 text-sm text-muted-foreground">Payment recovery case opened {formatDetected(record.created_at)}</p></div><div className="flex gap-2"><Button variant="secondary" onClick={copyId}><Copy size={14} /> {copied ? 'Copied' : 'Copy ID'}</Button><Button onClick={() => retry.mutate({ id })} disabled={retry.isPending || record.status === 'recovered'}><RefreshCcw size={14} /> {retry.isPending ? 'Queueing…' : record.status === 'recovered' ? 'Recovered' : 'Run retry'}</Button></div></div>
-    <div className="grid gap-6 xl:grid-cols-[1.3fr_.7fr]"><div className="space-y-6">
-      <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6"><div className="mb-6 flex items-start justify-between"><div><p className="eyebrow mb-2 text-muted-foreground">Recovery status</p><div className="flex items-center gap-3"><StatusBadge status={uiStatus(record.status)} /><span className="text-xs text-muted-foreground">Updated {formatDetected(record.updated_at)}</span></div></div><button onClick={() => toast({ title: 'Audit-ready record', description: 'All provider actions are retained in the API audit log.' })} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label="More record actions"><MoreHorizontal size={18} /></button></div><div className="grid gap-5 border-t border-border pt-5 sm:grid-cols-3"><div><p className="eyebrow text-muted-foreground">Amount</p><p className="metric-number mt-2 text-2xl font-bold text-primary">{formatMoney(record.amount)}</p></div><div><p className="eyebrow text-muted-foreground">Strategy</p><p className="mt-2 text-sm font-bold">{uiStrategy(record.strategies)}</p></div><div><p className="eyebrow text-muted-foreground">Attempts</p><p className="metric-number mt-2 text-2xl font-bold">{record.attempts_used} / {record.max_attempts || configuredMaxAttempts}</p></div></div></section>
-      <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6"><SectionHeading eyebrow="Audit trail" title="What happened" /><div className="relative ml-2 border-l border-border pl-7">{record.timeline.map((event, index) => <div key={event.id} className="relative pb-7 last:pb-1"><span className="absolute -left-[36px] top-0 grid size-5 place-items-center rounded-full border-4 border-card bg-primary">{event.status === 'complete' && <CheckCircle2 size={11} className="text-primary-foreground" />}</span><div className="flex flex-col justify-between gap-1 sm:flex-row"><div><p className="text-sm font-bold">{event.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{event.description}</p></div><time className="font-mono text-[10px] text-muted-foreground">{formatDetected(event.timestamp)}</time></div>        {index < record.timeline.length - 1 && <span className="absolute -left-[31px] top-6 h-4 w-px bg-primary/25" />}</div>)}</div></section>
-      <RecoveryAnalysisPanel recoveryId={record.id} />
-      <Phase4NotificationsPanel recoveryId={record.id} />
-    </div><div className="space-y-6">
-      <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6"><SectionHeading eyebrow="Next best action" title="Recovery playbook" /><div className="rounded-xl bg-primary/8 p-4"><div className="mb-3 flex items-center gap-2 text-primary"><ShieldAlert size={17} /><span className="text-xs font-bold">{record.selected_strategy ?? 'Smart retry'} recommended</span></div><p className="text-xs leading-5 text-muted-foreground">{record.root_cause ?? 'The recovery engine will continue with the configured playbook.'}</p><Button onClick={() => retry.mutate({ id })} disabled={retry.isPending || record.status === 'recovered'} className="mt-4 w-full">{record.status === 'recovered' ? 'Payment recovered' : 'Start smart retry'}</Button></div></section>
-      <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6"><SectionHeading eyebrow="Contact history" title="Channels used" /><div className="space-y-3">{[[Mail, 'Email', 'API strategy'], [MessageSquare, 'SMS / WhatsApp', 'API strategy'], [Smartphone, 'Card retry', 'Provider retry']].map(([Icon, label, value]) => <div key={label as string} className="flex items-center gap-3 rounded-xl border border-border p-3"><span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground"><Icon size={15} /></span><span className="flex-1 text-xs font-bold">{label as string}</span><span className="text-[10px] text-muted-foreground">{value as string}</span></div>)}</div></section>
-    </div></div>
-    <div className="mt-6 flex flex-wrap items-center gap-3 pb-8 text-[11px] text-muted-foreground"><Clock3 size={14} /> All actions are logged for auditability <span className="mx-1">·</span><button onClick={() => toast({ title: 'Provider record', description: 'Provider links can be added once the Razorpay account is connected.' })} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open provider record <ExternalLink size={12} /></button></div>
+    <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+      <div className="min-w-0 flex-1">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="eyebrow text-primary shrink-0">Recovery record</span>
+          <span className="font-mono text-[10px] text-muted-foreground break-all">/ {record.id}</span>
+        </div>
+        <h1 className="text-[26px] font-bold tracking-[-.04em] sm:text-[38px] break-words break-all sm:break-normal">
+          {customerLabel(record)}<span className="text-primary">.</span>
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground break-words">Payment recovery case opened {formatDetected(record.created_at)}</p>
+      </div>
+      <div className="flex flex-wrap gap-2 shrink-0">
+        <Button variant="secondary" onClick={copyId}><Copy size={14} /> {copied ? 'Copied' : 'Copy ID'}</Button>
+        <Button onClick={() => retry.mutate({ id })} disabled={retry.isPending || record.status === 'recovered'}><RefreshCcw size={14} /> {retry.isPending ? 'Queueing…' : record.status === 'recovered' ? 'Recovered' : 'Run retry'}</Button>
+      </div>
+    </div>
+    <div className="grid gap-6 xl:grid-cols-[1.3fr_.7fr] min-w-0">
+      <div className="space-y-6 min-w-0">
+        <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6 min-w-0 overflow-hidden">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="eyebrow mb-2 text-muted-foreground">Recovery status</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={uiStatus(record.status)} />
+                <span className="text-xs text-muted-foreground">Updated {formatDetected(record.updated_at)}</span>
+              </div>
+            </div>
+            <button onClick={() => toast({ title: 'Audit-ready record', description: 'All provider actions are retained in the API audit log.' })} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label="More record actions"><MoreHorizontal size={18} /></button>
+          </div>
+          <div className="grid gap-5 border-t border-border pt-5 sm:grid-cols-3 min-w-0">
+            <div className="min-w-0">
+              <p className="eyebrow text-muted-foreground">Amount</p>
+              <p className="metric-number mt-2 text-2xl font-bold text-primary break-all">{formatMoney(record.amount)}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="eyebrow text-muted-foreground">Strategy</p>
+              <p className="mt-2 text-sm font-bold break-words">{uiStrategy(record.strategies)}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="eyebrow text-muted-foreground">Attempts</p>
+              <p className="metric-number mt-2 text-2xl font-bold">{record.attempts_used} / {record.max_attempts || configuredMaxAttempts}</p>
+            </div>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6 min-w-0 overflow-hidden">
+          <SectionHeading eyebrow="Audit trail" title="What happened" />
+          <div className="relative ml-2 border-l border-border pl-7">
+            {record.timeline.map((event, index) => (
+              <div key={event.id} className="relative pb-7 last:pb-1">
+                <span className="absolute -left-[36px] top-0 grid size-5 place-items-center rounded-full border-4 border-card bg-primary">
+                  {event.status === 'complete' && <CheckCircle2 size={11} className="text-primary-foreground" />}
+                </span>
+                <div className="flex flex-col justify-between gap-1 sm:flex-row min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold break-words">{event.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground break-words">{event.description}</p>
+                  </div>
+                  <time className="font-mono text-[10px] text-muted-foreground shrink-0">{formatDetected(event.timestamp)}</time>
+                </div>
+                {index < record.timeline.length - 1 && <span className="absolute -left-[31px] top-6 h-4 w-px bg-primary/25" />}
+              </div>
+            ))}
+          </div>
+        </section>
+        <RecoveryAnalysisPanel recoveryId={record.id} />
+        <Phase4NotificationsPanel recoveryId={record.id} />
+      </div>
+      <div className="space-y-6 min-w-0">
+        <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6 min-w-0 overflow-hidden">
+          <SectionHeading eyebrow="Next best action" title="Recovery playbook" />
+          <div className="rounded-xl bg-primary/8 p-4 min-w-0">
+            <div className="mb-3 flex items-center gap-2 text-primary">
+              <ShieldAlert size={17} className="shrink-0" />
+              <span className="text-xs font-bold break-words">{record.selected_strategy ?? 'Smart retry'} recommended</span>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground break-words">{record.root_cause ?? 'The recovery engine will continue with the configured playbook.'}</p>
+            <Button onClick={() => retry.mutate({ id })} disabled={retry.isPending || record.status === 'recovered'} className="mt-4 w-full">
+              {record.status === 'recovered' ? 'Payment recovered' : 'Start smart retry'}
+            </Button>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6 min-w-0 overflow-hidden">
+          <SectionHeading eyebrow="Contact history" title="Channels used" />
+          <div className="space-y-3 min-w-0">
+            {[[Mail, 'Email', 'API strategy'], [MessageSquare, 'SMS / WhatsApp', 'API strategy'], [Smartphone, 'Card retry', 'Provider retry']].map(([Icon, label, value]) => (
+              <div key={label as string} className="flex items-center gap-3 rounded-xl border border-border p-3 min-w-0">
+                <span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground shrink-0"><Icon size={15} /></span>
+                <span className="flex-1 text-xs font-bold truncate min-w-0">{label as string}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">{value as string}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+    <div className="mt-6 flex flex-wrap items-center gap-3 pb-8 text-[11px] text-muted-foreground break-words">
+      <Clock3 size={14} className="shrink-0" /> All actions are logged for auditability <span className="mx-1">·</span>
+      <button onClick={() => toast({ title: 'Provider record', description: 'Provider links can be added once the Razorpay account is connected.' })} className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open provider record <ExternalLink size={12} /></button>
+    </div>
   </div>;
 }

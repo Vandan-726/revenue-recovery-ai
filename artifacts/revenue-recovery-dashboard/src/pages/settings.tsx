@@ -31,6 +31,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button, SectionHeading, Skeleton } from '@/components/ui-kit';
 import { useToast } from '@/hooks/use-toast';
 import { useLiveStream } from '@/context/live-stream-context';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const tabs = ['Profile', 'Account', 'Recovery config', 'Integrations', 'Danger zone'];
 
@@ -363,7 +364,7 @@ export default function Settings() {
 
   if (settings.isLoading) {
     return (
-      <div className="page-enter mx-auto max-w-[1080px]">
+      <div className="page-enter mx-auto max-w-[1080px] w-full min-w-0 overflow-x-hidden">
         <Skeleton className="h-[560px]" />
       </div>
     );
@@ -378,19 +379,19 @@ export default function Settings() {
     .toUpperCase() || 'AR';
 
   return (
-    <div className="page-enter mx-auto max-w-[1080px]">
+    <div className="page-enter mx-auto max-w-[1080px] w-full min-w-0 overflow-x-hidden">
       <div className="mb-8">
         <p className="eyebrow mb-3 text-primary">Workspace controls</p>
-        <h1 className="text-[30px] font-bold tracking-[-.04em] sm:text-[38px]">
+        <h1 className="text-[30px] font-bold tracking-[-.04em] sm:text-[38px] break-words">
           Settings<span className="text-primary">.</span>
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground break-words">
           Configure real-world payment gateways, SMS/WhatsApp messaging, email notifications, and automated recovery playbooks.
         </p>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[210px_1fr]">
-        <nav className="flex gap-1 overflow-auto pb-2 lg:block lg:space-y-1 lg:pb-0">
+      <div className="grid gap-8 lg:grid-cols-[210px_1fr] min-w-0">
+        <nav className="flex gap-1 overflow-x-auto pb-2 min-w-0 max-w-full lg:block lg:space-y-1 lg:pb-0">
           {tabs.map((item) => (
             <button
               key={item}
@@ -1017,21 +1018,24 @@ function SelectField({
   onChange: (val: string) => void;
 }) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="mb-2 block text-[11px] font-bold text-muted-foreground">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/10"
-        data-testid={`select-${label.toLowerCase().replaceAll(' ', '-')}`}
-      >
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {displayMap[opt] || opt}
-          </option>
-        ))}
-      </select>
-    </label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger
+          className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted focus:border-primary focus:ring-2 focus:ring-primary/10"
+          data-testid={`select-${label.toLowerCase().replaceAll(' ', '-')}`}
+        >
+          <SelectValue className="truncate">{displayMap[value] || value}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="z-50 min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-32px)] rounded-xl border border-border bg-card p-1 shadow-xl">
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt} className="cursor-pointer rounded-lg py-2.5 pl-3 pr-8 text-xs font-semibold text-foreground focus:bg-muted focus:text-primary">
+              {displayMap[opt] || opt}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

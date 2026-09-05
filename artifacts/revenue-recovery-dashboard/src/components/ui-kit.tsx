@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Check, ChevronDown, CircleAlert, LoaderCircle, Search, SlidersHorizontal } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import type { RecoveryStatus } from '@/data/mock';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function Button({ children, variant = 'primary', onClick, className = '', type = 'button', disabled = false, testId }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; onClick?: () => void; className?: string; type?: 'button' | 'submit'; disabled?: boolean; testId?: string }) {
   const styles = {
@@ -36,11 +37,28 @@ export function SectionHeading({ eyebrow, title, action }: { eyebrow: string; ti
 }
 
 export function SearchBox({ value, onChange, placeholder = 'Search recoveries...' }: { value: string; onChange: (value: string) => void; placeholder?: string }) {
-  return <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 text-muted-foreground focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 sm:max-w-[290px]" data-testid="label-search"><Search size={16} /><input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70" data-testid="input-search" /></label>;
+  return <label className="flex h-10 w-full min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 text-muted-foreground focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 sm:max-w-[290px]" data-testid="label-search"><Search size={16} className="shrink-0" /><input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70" data-testid="input-search" /></label>;
 }
 
-export function SelectControl({ value, onChange, options, testId = 'select-control' }: { value: string; onChange: (value: string) => void; options: string[]; testId?: string }) {
-  return <label className="relative flex h-10 items-center"><SlidersHorizontal size={14} className="pointer-events-none absolute left-3 text-muted-foreground" /><select value={value} onChange={event => onChange(event.target.value)} className="h-full appearance-none rounded-xl border border-border bg-card py-2 pl-9 pr-8 text-xs font-semibold text-foreground outline-none hover:bg-muted focus:border-primary" data-testid={testId}>{options.map(option => <option key={option}>{option}</option>)}</select><ChevronDown size={14} className="pointer-events-none absolute right-3 text-muted-foreground" /></label>;
+export function SelectControl({ value, onChange, options, testId = 'select-control', className = '' }: { value: string; onChange: (value: string) => void; options: string[]; testId?: string; className?: string }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger
+        className={`relative h-10 w-full min-w-0 gap-2 rounded-xl border border-border bg-card pl-9 pr-3 text-xs font-semibold text-foreground hover:bg-muted focus:border-primary focus:ring-2 focus:ring-primary/10 sm:w-auto ${className}`}
+        data-testid={testId}
+      >
+        <SlidersHorizontal size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground shrink-0" />
+        <SelectValue className="truncate">{value}</SelectValue>
+      </SelectTrigger>
+      <SelectContent className="z-50 min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-32px)] rounded-xl border border-border bg-card p-1 shadow-xl">
+        {options.map((option) => (
+          <SelectItem key={option} value={option} className="cursor-pointer rounded-lg py-2 pl-3 pr-8 text-xs font-semibold text-foreground focus:bg-muted focus:text-primary">
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function Skeleton({ className = '' }: { className?: string }) { return <div className={`animate-pulse rounded-lg bg-muted ${className}`} />; }

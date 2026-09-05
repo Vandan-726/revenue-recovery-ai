@@ -82,7 +82,7 @@ export function RecoveryAnalysisPanel({ recoveryId }: { recoveryId: string }) {
   };
 
   return (
-    <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6">
+    <section className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_10px_24px_hsl(221_34%_15%_/_0.035)] sm:p-6 min-w-0 overflow-hidden">
       <SectionHeading
         eyebrow="Phase 3 · Recovery AI"
         title="Root-cause analysis"
@@ -108,8 +108,8 @@ export function RecoveryAnalysisPanel({ recoveryId }: { recoveryId: string }) {
       )}
 
       {hasAnalysis && analysis && (
-        <div className="space-y-5">
-          <div className="rounded-xl bg-primary/8 p-4">
+        <div className="space-y-5 min-w-0">
+          <div className="rounded-xl bg-primary/8 p-4 min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-2 text-xs font-bold text-primary">
                 <Cpu size={15} />
@@ -122,8 +122,8 @@ export function RecoveryAnalysisPanel({ recoveryId }: { recoveryId: string }) {
                 </span>
               </span>
             </div>
-            <p className="text-sm font-bold">{analysis.root_cause}</p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">{analysis.reasoning}</p>
+            <p className="text-sm font-bold break-words">{analysis.root_cause}</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground break-words">{analysis.reasoning}</p>
             <div className="mt-3 flex items-center gap-2 text-[11px] font-bold">
               {Boolean(analysis.is_retryable ?? (analysis.recommended_actions ?? []).some((a) => ['retry', 'smart_retry', 'update_payment_link', 'whatsapp', 'email'].includes(a))) ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-primary">
