@@ -4,6 +4,7 @@
 dist
 tmp
 out-tsc
+/public
 artifacts/revenue-recovery-dashboard/public/index.html
 artifacts/revenue-recovery-dashboard/public/assets
 *.tsbuildinfo
