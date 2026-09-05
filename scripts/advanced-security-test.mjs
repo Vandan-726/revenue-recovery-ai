@@ -49,6 +49,16 @@ console.log("🛡️  REVENUE RECOVERY AI - HIGH-LEVEL ADVANCED SECURITY TEST SU
 console.log(`Target Base URL: ${baseUrl}`);
 console.log("=======================================================================\n");
 
+let initialSettings = null;
+try {
+  const initialRes = await request("/api/v1/settings");
+  if (initialRes.response.status === 200 && initialRes.body) {
+    initialSettings = initialRes.body;
+  }
+} catch {
+  // Ignored if server not reachable
+}
+
 // ============================================================================
 // LEVEL 1: WEBHOOK IDEMPOTENCY & REPLAY DEFENSE VERIFICATION
 // ============================================================================
@@ -270,6 +280,21 @@ try {
   logPass("Protect backend memory against oversized JSON payload exhaustion");
 } catch (err) {
   logFail("Protect backend memory against oversized JSON payload exhaustion", err);
+}
+
+// ============================================================================
+// RESTORE ORIGINAL SETTINGS
+// ============================================================================
+if (initialSettings) {
+  try {
+    await request("/api/v1/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(initialSettings),
+    });
+  } catch {
+    // Ignore restore error
+  }
 }
 
 // ============================================================================

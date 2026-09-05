@@ -13,7 +13,7 @@ export default function RecoveryDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { formatMoney, formatDetected, maxAttempts: configuredMaxAttempts } = useWorkspaceFormatters();
-  const detail = useGetRecovery(id);
+  const detail = useGetRecovery(id, { query: { refetchInterval: 3000 } as any });
   const retry = useRetryRecovery({ mutation: { onSuccess: () => { void detail.refetch(); toast({ title: 'Retry queued', description: 'The recovery attempt was added to the API audit trail.' }); }, onError: () => toast({ title: 'Retry unavailable', description: 'The API could not queue this recovery.' }) } });
   const [copied, setCopied] = useState(false);
   if (detail.isLoading) return <div className="page-enter mx-auto max-w-[1220px]"><Skeleton className="h-96" /></div>;

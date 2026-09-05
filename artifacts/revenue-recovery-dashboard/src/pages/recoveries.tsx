@@ -21,7 +21,10 @@ export default function Recoveries() {
   const { toast } = useToast();
   const { currency, formatMoney, formatDetected } = useWorkspaceFormatters();
 
-  const result = useListRecoveries({ page: 1, per_page: 100, search: query || undefined, status: statusMap[status] });
+  const result = useListRecoveries(
+    { page: 1, per_page: 100, search: query || undefined, status: statusMap[status] },
+    { query: { refetchInterval: 4000 } as any }
+  );
   const createMutation = useCreateRecovery();
 
   const rows = useMemo(() => [...(result.data?.data ?? [])].filter((item) => strategy === 'All strategies' || uiStrategy(item.strategies) === strategy).sort((a, b) => {

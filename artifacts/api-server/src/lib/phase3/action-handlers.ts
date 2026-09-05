@@ -50,10 +50,27 @@ function emailTemplate(amountPaise: number): { subject: string; html: string } {
 // A declined card is likely to succeed on a later retry; a hard-invalid card is
 // not. This keeps the simulation realistic and deterministic-ish.
 function retryLikelySucceeds(ctx: ActionContext): boolean {
-  if (ctx.errorCode === "BAD_REQUEST_PAYMENT_CARD_INVALID") return false;
-  // Higher chance of success on later attempts.
-  const base = ctx.errorCode === "BAD_REQUEST_PAYMENT_DECLINED" ? 0.45 : 0.35;
-  const chance = Math.min(0.9, base + ctx.attemptNumber * 0.15);
+  const code = (ctx.errorCode ?? "").toUpperCase();
+  // Hard failures cannot succeed by retrying the same card
+  if (
+    code.includes("CARD_INVALID") ||
+    code.includes("EXPIRED") ||
+    code.includes("LIMIT_EXCEEDED")
+  ) {
+    return false;
+  }
+  // Soft / transient failures have realistic probability
+  if (code.includes("BANK_TIMEOUT") || code.includes("TIMED_OUT")) {
+    return Math.random() < 0.65;
+  }
+  if (code.includes("INSUFFICIENT_FUNDS")) {
+    return Math.random() < 0.35;
+  }
+  if (code.includes("3DS") || code.includes("AUTHENTICATION") || code.includes("COLLECT")) {
+    return Math.random() < 0.30;
+  }
+  const base = code.includes("DECLINED") ? 0.40 : 0.30;
+  const chance = Math.min(0.70, base + ctx.attemptNumber * 0.1);
   return Math.random() < chance;
 }
 

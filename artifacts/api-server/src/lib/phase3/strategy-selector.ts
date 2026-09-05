@@ -31,7 +31,7 @@ export function selectStrategies(
   const actions = analysis.recommended_actions;
   const strategies: StrategyStep[] = [];
 
-  // Rule 1: Immediate retry (declined / timeout style errors).
+  // Rule 1: Immediate smart retry (declined / timeout / gateway transient errors).
   if (actions.includes("retry")) {
     strategies.push({
       action: ActionType.RETRY,
@@ -43,14 +43,20 @@ export function selectStrategies(
     });
   }
 
-  // Rule 2: Customer outreach (SMS / WhatsApp / Email).
-  const wantsOutreach =
-    actions.includes("sms") ||
-    actions.includes("whatsapp") ||
-    actions.includes("update_payment_link");
-
-  if (wantsOutreach) {
-    if (customer.phone) {
+  // Rule 2: High-conversion WhatsApp / SMS 1-click checkout
+  if (actions.includes("whatsapp") || actions.includes("sms")) {
+    if (actions.includes("whatsapp")) {
+      strategies.push({
+        action: ActionType.WHATSAPP,
+        delay_seconds: 600,
+        config: {
+          template: "payment_failed_update_method",
+          language: detectLanguage(customer),
+        },
+        order: 2,
+        priority: "high",
+      });
+    } else {
       strategies.push({
         action: ActionType.SMS,
         delay_seconds: 600,
@@ -62,16 +68,10 @@ export function selectStrategies(
         priority: "high",
       });
     }
-    if (customer.email || actions.includes("email")) {
-      strategies.push({
-        action: ActionType.EMAIL,
-        delay_seconds: 1200,
-        config: { template: "payment_failed_update_method" },
-        order: 3,
-        priority: "medium",
-      });
-    }
-  } else if (actions.includes("email")) {
+  }
+
+  // Rule 3: Interactive payment update link via Email
+  if (actions.includes("email") || actions.includes("update_payment_link")) {
     strategies.push({
       action: ActionType.EMAIL,
       delay_seconds: 1200,
@@ -81,29 +81,27 @@ export function selectStrategies(
     });
   }
 
-  // Rule 3: Incentive (discount) for high-value customers.
+  // Rule 4: Incentive (discount) for high-value / churn-prevention customers
   if (actions.includes("discount")) {
-    if (customer.lifetime_value > RECOVERY_CONFIG.highValueThreshold) {
-      const discountAmount = Math.min(
-        RECOVERY_CONFIG.maxDiscount,
-        Math.floor(payment.amount * 0.1),
-      );
-      strategies.push({
-        action: ActionType.DISCOUNT,
-        delay_seconds: 3600,
-        config: {
-          discount_amount: discountAmount,
-          discount_percent: 10,
-          max_discount: RECOVERY_CONFIG.maxDiscount,
-          validity_hours: RECOVERY_CONFIG.discountValidityHours,
-        },
-        order: 4,
-        priority: "medium",
-      });
-    }
+    const discountAmount = Math.min(
+      RECOVERY_CONFIG.maxDiscount,
+      Math.floor(payment.amount * 0.1),
+    );
+    strategies.push({
+      action: ActionType.DISCOUNT,
+      delay_seconds: 3600,
+      config: {
+        discount_amount: discountAmount > 0 ? discountAmount : 500,
+        discount_percent: 10,
+        max_discount: RECOVERY_CONFIG.maxDiscount,
+        validity_hours: RECOVERY_CONFIG.discountValidityHours,
+      },
+      order: 4,
+      priority: "medium",
+    });
   }
 
-  // Rule 4: Escalation for urgent, very-high-value customers.
+  // Rule 5: Escalation for urgent, very-high-value customers
   if (
     analysis.urgency === "high" &&
     customer.lifetime_value > RECOVERY_CONFIG.escalationThreshold
@@ -117,14 +115,14 @@ export function selectStrategies(
     });
   }
 
-  // Guarantee at least one actionable step.
+  // Guarantee at least one actionable step
   if (strategies.length === 0) {
     strategies.push({
-      action: ActionType.EMAIL,
-      delay_seconds: 1200,
-      config: { template: "payment_failed_update_method" },
+      action: ActionType.RETRY,
+      delay_seconds: 300,
+      config: { backoff_type: "exponential", backoff_multiplier: 2 },
       order: 1,
-      priority: "medium",
+      priority: "high",
     });
   }
 

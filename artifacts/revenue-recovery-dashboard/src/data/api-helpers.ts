@@ -11,7 +11,9 @@ export function uiStatus(status: ApiRecoveryStatus): UiStatus {
 }
 
 export function uiStrategy(strategies: string[] = []): UiStrategy {
+  if (strategies.includes('discount')) return 'Discount';
   if (strategies.includes('whatsapp') || strategies.includes('sms')) return 'SMS+Retry';
+  if (strategies.includes('smart_retry') && !strategies.includes('email')) return 'Retry';
   if (strategies.includes('email')) return 'Email';
   if (strategies.includes('support')) return 'Discount';
   return 'Retry';

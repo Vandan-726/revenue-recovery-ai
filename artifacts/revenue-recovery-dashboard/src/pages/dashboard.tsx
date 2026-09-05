@@ -29,8 +29,8 @@ function DashboardLoading() {
 export default function Dashboard() {
   const { toast } = useToast();
   const { formatMoney, formatCompact, formatDetected } = useWorkspaceFormatters();
-  const dashboard = useGetDashboard({ days: 30 });
-  const active = useListRecoveries({ page: 1, per_page: 3, status: 'active' });
+  const dashboard = useGetDashboard({ days: 30 }, { query: { refetchInterval: 4000 } as any });
+  const active = useListRecoveries({ page: 1, per_page: 3, status: 'active' }, { query: { refetchInterval: 4000 } as any });
   const data = dashboard.data;
   if (dashboard.isLoading) return <div className="page-enter mx-auto max-w-[1440px]"><DashboardLoading /></div>;
   if (dashboard.isError) return <div className="page-enter mx-auto max-w-[720px]"><EmptyState title="Dashboard unavailable" description="The API server could not return recovery metrics." action={<Button variant="secondary" onClick={() => dashboard.refetch()}><RotateCcw size={14} /> Try again</Button>} /></div>;

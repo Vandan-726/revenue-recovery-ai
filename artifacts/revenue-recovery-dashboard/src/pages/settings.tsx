@@ -30,6 +30,7 @@ import { useGetSettings, useUpdateSettings } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, SectionHeading, Skeleton } from '@/components/ui-kit';
 import { useToast } from '@/hooks/use-toast';
+import { useLiveStream } from '@/context/live-stream-context';
 
 const tabs = ['Profile', 'Account', 'Recovery config', 'Integrations', 'Danger zone'];
 
@@ -113,7 +114,20 @@ export default function Settings() {
   const [testTargetEmail, setTestTargetEmail] = useState('admin@recoverly.io');
   const [testingChannel, setTestingChannel] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<any>(null);
-  const [simulatingWebhook, setSimulatingWebhook] = useState(false);
+
+  // Global persistent live traffic stream context
+  const {
+    isStreaming,
+    countdown,
+    streamCount,
+    isIngesting,
+    isClearing,
+    startStream,
+    pauseStream,
+    toggleStream,
+    ingestRandomPayment,
+    clearAllRecoveries,
+  } = useLiveStream();
 
   const update = useUpdateSettings({
     mutation: {
@@ -269,32 +283,36 @@ export default function Settings() {
     });
   };
 
-  const togglePauseRecovery = () => {
+  const togglePauseRecovery = async () => {
     const nextState = !isPaused;
     setIsPaused(nextState);
-    update.mutate({
-      data: {
-        recovery: {
-          paused: nextState,
+    try {
+      await update.mutateAsync({
+        data: {
+          recovery: {
+            paused: nextState,
+          },
         },
-      },
-    });
-    toast({
-      title: nextState ? 'Recovery activity paused' : 'Recovery activity resumed',
-      description: nextState
-        ? 'Automated retries and message dispatches are on hold.'
-        : 'Automated recovery flows are actively operating.',
-    });
+      });
+      await queryClient.invalidateQueries();
+      toast({
+        title: nextState ? 'Recovery activity paused' : 'Recovery activity resumed',
+        description: nextState
+          ? 'Automated retries and message dispatches are now halted across the workspace.'
+          : 'Automated recovery flows are actively operating.',
+      });
+    } catch {
+      setIsPaused(!nextState);
+      toast({
+        title: 'Update failed',
+        description: 'Could not update recovery pause state.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const getWebhookUrl = () => {
-    if (rzpMode === 'live') {
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      return isLocal
-        ? 'https://api.recoverly.io/api/v1/webhooks/razorpay'
-        : `${window.location.origin}/api/v1/webhooks/razorpay`;
-    }
-    return `${window.location.origin}/api/v1/webhooks/razorpay`;
+    return 'https://api.recoverly.io/api/v1/webhooks/razorpay';
   };
 
   const copyWebhookUrl = () => {
@@ -340,47 +358,6 @@ export default function Settings() {
       toast({ title: 'Test Failed', description: e.message || 'Unable to execute test dispatch.' });
     } finally {
       setTestingChannel(null);
-    }
-  };
-
-  const simulateWebhook = async () => {
-    setSimulatingWebhook(true);
-    try {
-      const res = await fetch('/api/v1/webhooks/razorpay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'payment.failed',
-          payload: {
-            payment: {
-              entity: {
-                id: `pay_live_${Date.now().toString().slice(-6)}`,
-                amount: 249900,
-                currency: 'INR',
-                status: 'failed',
-                error_code: 'BAD_REQUEST_PAYMENT_TIMED_OUT',
-                error_description: 'Payment timed out by issuer bank',
-                email: testTargetEmail || 'customer.live@example.com',
-                contact: testTargetPhone || '+919876543210',
-              },
-            },
-          },
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        queryClient.invalidateQueries();
-        toast({
-          title: 'Live Webhook Event Processed!',
-          description: `Event ID: ${data.event_id || 'success'} · New active recovery ingested!`,
-        });
-      } else {
-        toast({ title: 'Webhook Error', description: data.message || 'Webhook failed to process.' });
-      }
-    } catch (e) {
-      toast({ title: 'Network Error', description: 'Failed to contact webhook listener.' });
-    } finally {
-      setSimulatingWebhook(false);
     }
   };
 
@@ -609,13 +586,54 @@ export default function Settings() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <Radio size={16} className="text-primary animate-pulse" />
-                      Live & Simulated Dispatch Testing Sandbox
+                      <Radio size={16} className={`text-primary ${isStreaming ? 'animate-ping' : ''}`} />
+                      Live Traffic Streamer & Testing Sandbox
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Specify destination numbers and email for testing real-world delivery or sandbox simulation.
+                      Stream authentic webhook failure events periodically (every 30-45s) or trigger single events to test real-time AI diagnosis & recovery.
                     </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    {isStreaming ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-bold text-primary">
+                        <span className="size-2 rounded-full bg-primary animate-pulse" />
+                        Next event in {countdown}s
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
+                        Stream Idle
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {isStreaming ? (
+                    <Button variant="secondary" onClick={pauseStream}>
+                      <Pause size={13} /> Pause Live Stream
+                    </Button>
+                  ) : (
+                    <Button variant="primary" onClick={startStream}>
+                      <Play size={13} /> Start Live Traffic Stream
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() => ingestRandomPayment()}
+                    disabled={isIngesting}
+                  >
+                    <Send size={13} className={isIngesting ? 'animate-spin' : ''} />
+                    {isIngesting ? 'Ingesting…' : 'Ingest Single Event'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={clearAllRecoveries}
+                    disabled={isClearing}
+                    className="text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 size={13} />
+                    {isClearing ? 'Clearing…' : 'Clear All Recoveries'}
+                  </Button>
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -664,33 +682,33 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
-                  <ModeBadge mode={rzpMode} onChange={(m) => setRzpMode(m)} />
+                  <span className="inline-flex items-center rounded-lg bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                    Live API
+                  </span>
                 </div>
 
-                {rzpMode === 'live' && (
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Field
-                      label="Key ID"
-                      value={rzpKeyId}
-                      onChange={(e) => setRzpKeyId(e.target.value)}
-                      placeholder="rzp_live_... or rzp_test_..."
-                    />
-                    <Field
-                      label="Key Secret"
-                      type="password"
-                      value={rzpKeySecret}
-                      onChange={(e) => setRzpKeySecret(e.target.value)}
-                      placeholder="Enter Razorpay Key Secret"
-                    />
-                  </div>
-                )}
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Key ID"
+                    value={rzpKeyId}
+                    onChange={(e) => setRzpKeyId(e.target.value)}
+                    placeholder="rzp_live_... or rzp_test_..."
+                  />
+                  <Field
+                    label="Key Secret"
+                    type="password"
+                    value={rzpKeySecret}
+                    onChange={(e) => setRzpKeySecret(e.target.value)}
+                    placeholder="Enter Razorpay Key Secret"
+                  />
+                </div>
 
                 <div className="mt-4 rounded-xl bg-background/80 p-3.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="eyebrow text-[10px] text-muted-foreground">Webhook endpoint URL</span>
                       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                        {rzpMode === 'live' ? 'HTTPS Live Webhook' : 'Localhost Sandbox'}
+                        HTTPS Live Webhook
                       </span>
                     </div>
                     <button
@@ -705,29 +723,30 @@ export default function Settings() {
                   </p>
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Test payment webhook processing or trigger live payment link generation.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => triggerIntegrationTest('razorpay', rzpMode === 'simulation')}
-                      disabled={testingChannel === 'razorpay'}
-                    >
-                      <Zap size={13} className={testingChannel === 'razorpay' ? 'animate-spin' : 'text-primary'} />
-                      {testingChannel === 'razorpay' ? 'Testing…' : rzpMode === 'live' ? 'Test Live Payment API' : 'Test Simulated Retry'}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={simulateWebhook}
-                      disabled={simulatingWebhook}
-                    >
-                      <Send size={13} className={simulatingWebhook ? 'animate-spin' : ''} />
-                      {simulatingWebhook ? 'Ingesting…' : 'Simulate Ingestion Event'}
-                    </Button>
+                {Boolean(rzpKeyId && rzpKeySecret) && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                    <p className="text-xs text-muted-foreground">
+                      Test payment webhook processing or trigger live payment link generation.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => triggerIntegrationTest('razorpay', false)}
+                        disabled={testingChannel === 'razorpay'}
+                      >
+                        <Zap size={13} className={testingChannel === 'razorpay' ? 'animate-spin' : 'text-primary'} />
+                        {testingChannel === 'razorpay' ? 'Testing…' : 'Test Live Payment API'}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={toggleStream}
+                      >
+                        {isStreaming ? <Pause size={13} /> : <Play size={13} />}
+                        {isStreaming ? `Streaming (${countdown}s)` : 'Start Live Stream'}
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
               </section>
 
               {/* 2. WHATSAPP & SMS (TWILIO) */}
@@ -744,62 +763,64 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
-                  <ModeBadge mode={smsMode} onChange={(m) => setSmsMode(m)} />
+                  <span className="inline-flex items-center rounded-lg bg-[#25D366]/10 px-3 py-1 text-xs font-bold text-[#25D366]">
+                    Live API
+                  </span>
                 </div>
 
-                {smsMode === 'live' && (
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Field
-                      label="Twilio Account SID"
-                      value={twilioSid}
-                      onChange={(e) => setTwilioSid(e.target.value)}
-                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    />
-                    <Field
-                      label="Twilio Auth Token"
-                      type="password"
-                      value={twilioAuth}
-                      onChange={(e) => setTwilioAuth(e.target.value)}
-                      placeholder="Enter Twilio Auth Token"
-                    />
-                    <Field
-                      label="WhatsApp From Number"
-                      value={twilioWaFrom}
-                      onChange={(e) => setTwilioWaFrom(e.target.value)}
-                      placeholder="whatsapp:+14155238886"
-                    />
-                    <Field
-                      label="SMS From Number"
-                      value={twilioPhone}
-                      onChange={(e) => setTwilioPhone(e.target.value)}
-                      placeholder="+1234567890"
-                    />
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Twilio Account SID"
+                    value={twilioSid}
+                    onChange={(e) => setTwilioSid(e.target.value)}
+                    placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  />
+                  <Field
+                    label="Twilio Auth Token"
+                    type="password"
+                    value={twilioAuth}
+                    onChange={(e) => setTwilioAuth(e.target.value)}
+                    placeholder="Enter Twilio Auth Token"
+                  />
+                  <Field
+                    label="WhatsApp From Number"
+                    value={twilioWaFrom}
+                    onChange={(e) => setTwilioWaFrom(e.target.value)}
+                    placeholder="whatsapp:+14155238886"
+                  />
+                  <Field
+                    label="SMS From Number"
+                    value={twilioPhone}
+                    onChange={(e) => setTwilioPhone(e.target.value)}
+                    placeholder="+1234567890"
+                  />
+                </div>
+
+                {Boolean(twilioSid && twilioAuth && twilioWaFrom && twilioPhone) && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                    <p className="text-xs text-muted-foreground">
+                      Send test dispatch to <strong>{testTargetPhone}</strong> via Live API.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => triggerIntegrationTest('sms', false)}
+                        disabled={testingChannel === 'sms'}
+                      >
+                        <Smartphone size={13} className={testingChannel === 'sms' ? 'animate-spin' : ''} />
+                        {testingChannel === 'sms' ? 'Sending SMS…' : 'Send SMS'}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={() => triggerIntegrationTest('whatsapp', false)}
+                        disabled={testingChannel === 'whatsapp'}
+                      >
+                        <MessageSquare size={13} className={testingChannel === 'whatsapp' ? 'animate-spin' : ''} />
+                        {testingChannel === 'whatsapp' ? 'Sending WhatsApp…' : 'Send WhatsApp'}
+                      </Button>
+                    </div>
                   </div>
                 )}
-
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Send test dispatch to <strong>{testTargetPhone}</strong> in {smsMode} mode.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => triggerIntegrationTest('sms', smsMode === 'simulation')}
-                      disabled={testingChannel === 'sms'}
-                    >
-                      <Smartphone size={13} className={testingChannel === 'sms' ? 'animate-spin' : ''} />
-                      {testingChannel === 'sms' ? 'Sending SMS…' : smsMode === 'live' ? 'Send Real SMS' : 'Simulate SMS'}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={() => triggerIntegrationTest('whatsapp', smsMode === 'simulation')}
-                      disabled={testingChannel === 'whatsapp'}
-                    >
-                      <MessageSquare size={13} className={testingChannel === 'whatsapp' ? 'animate-spin' : ''} />
-                      {testingChannel === 'whatsapp' ? 'Sending WhatsApp…' : smsMode === 'live' ? 'Send Real WhatsApp' : 'Simulate WhatsApp'}
-                    </Button>
-                  </div>
-                </div>
               </section>
 
               {/* 3. EMAIL (SENDGRID / AWS SES) */}
@@ -816,41 +837,43 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
-                  <ModeBadge mode={emailMode} onChange={(m) => setEmailMode(m)} />
+                  <span className="inline-flex items-center rounded-lg bg-chart-2/10 px-3 py-1 text-xs font-bold text-chart-2">
+                    Live API
+                  </span>
                 </div>
 
-                {emailMode === 'live' && (
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Field
-                      label="SendGrid API Key"
-                      type="password"
-                      value={sendgridKey}
-                      onChange={(e) => setSendgridKey(e.target.value)}
-                      placeholder="SG.xxxxxxxxxxxxxxxxxxxx"
-                    />
-                    <Field
-                      label="Verified Sender Email (From)"
-                      type="email"
-                      value={sendgridFrom}
-                      onChange={(e) => setSendgridFrom(e.target.value)}
-                      placeholder="billing@yourdomain.com"
-                    />
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="SendGrid API Key"
+                    type="password"
+                    value={sendgridKey}
+                    onChange={(e) => setSendgridKey(e.target.value)}
+                    placeholder="SG.xxxxxxxxxxxxxxxxxxxx"
+                  />
+                  <Field
+                    label="Verified Sender Email (From)"
+                    type="email"
+                    value={sendgridFrom}
+                    onChange={(e) => setSendgridFrom(e.target.value)}
+                    placeholder="billing@yourdomain.com"
+                  />
+                </div>
+
+                {Boolean(sendgridKey && sendgridFrom) && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                    <p className="text-xs text-muted-foreground">
+                      Send test recovery email to <strong>{testTargetEmail}</strong> via Live API.
+                    </p>
+                    <Button
+                      variant="primary"
+                      onClick={() => triggerIntegrationTest('email', false)}
+                      disabled={testingChannel === 'email'}
+                    >
+                      <Mail size={13} className={testingChannel === 'email' ? 'animate-spin' : ''} />
+                      {testingChannel === 'email' ? 'Sending Email…' : 'Send Email'}
+                    </Button>
                   </div>
                 )}
-
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Send test recovery email to <strong>{testTargetEmail}</strong> in {emailMode} mode.
-                  </p>
-                  <Button
-                    variant="primary"
-                    onClick={() => triggerIntegrationTest('email', emailMode === 'simulation')}
-                    disabled={testingChannel === 'email'}
-                  >
-                    <Mail size={13} className={testingChannel === 'email' ? 'animate-spin' : ''} />
-                    {testingChannel === 'email' ? 'Sending Email…' : emailMode === 'live' ? 'Send Real Email' : 'Simulate Email'}
-                  </Button>
-                </div>
               </section>
 
               <div className="flex justify-end pt-2">

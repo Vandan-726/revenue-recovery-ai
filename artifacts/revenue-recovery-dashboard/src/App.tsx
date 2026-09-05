@@ -9,6 +9,7 @@ import Recoveries from '@/pages/recoveries';
 import RecoveryDetail from '@/pages/recovery-detail';
 import Analytics from '@/pages/analytics';
 import Settings from '@/pages/settings';
+import { LiveStreamProvider } from '@/context/live-stream-context';
 import { AppShell } from '@/components/app-shell';
 import {
   Route,
@@ -58,10 +59,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <LiveStreamProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </LiveStreamProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

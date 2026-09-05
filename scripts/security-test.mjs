@@ -49,6 +49,16 @@ console.log("🛡️  REVENUE RECOVERY AI - SECURITY TESTING SUITE");
 console.log(`Target Base URL: ${baseUrl}`);
 console.log("=================================================\n");
 
+let initialSettings = null;
+try {
+  const initialRes = await request("/api/v1/settings");
+  if (initialRes.response.status === 200 && initialRes.body) {
+    initialSettings = initialRes.body;
+  }
+} catch {
+  // Ignored if server not reachable yet
+}
+
 // ============================================================================
 // SUITE 1: Webhook Security & HMAC Signature Verification
 // ============================================================================
@@ -347,6 +357,21 @@ for (const [method, ep, expectedStatus] of endpointsToTest) {
     logPass(`${method} ${ep} - Endpoint active & healthy (${res.response.status})`);
   } catch (err) {
     logFail(`${method} ${ep} security check`, err);
+  }
+}
+
+// ============================================================================
+// RESTORE ORIGINAL SETTINGS
+// ============================================================================
+if (initialSettings) {
+  try {
+    await request("/api/v1/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(initialSettings),
+    });
+  } catch {
+    // Ignore restore error
   }
 }
 

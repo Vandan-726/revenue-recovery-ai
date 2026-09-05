@@ -30,6 +30,7 @@ export interface TaskRecord {
 export interface EnqueueOptions {
   name: string;
   delaySeconds?: number;
+  delayMs?: number;
   maxRetries?: number;
   priority?: number;
 }
@@ -73,7 +74,7 @@ function backoffMs(retry: number): number {
 
 export function enqueue(fn: TaskFn, options: EnqueueOptions): string {
   const now = Date.now();
-  const delay = scheduledDelayMs(options.delaySeconds ?? 0);
+  const delay = typeof options.delayMs === "number" ? options.delayMs : scheduledDelayMs(options.delaySeconds ?? 0);
   const record: TaskRecord = {
     id: randomUUID(),
     name: options.name,
