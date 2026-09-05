@@ -1,21 +1,29 @@
 # 🚀 Recoverly AI — Autonomous Revenue Recovery Platform
 
-<div align="center">
+> **Autonomous payment recovery engine with AI-driven failure root-cause diagnosis, smart off-peak payment retries, and high-converting omnichannel recovery campaigns.**
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19.1-61DAFB.svg?style=flat-square&logo=react)](https://react.dev/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-38B2AC.svg?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
-[![Express](https://img.shields.io/badge/Express-5.2-000000.svg?style=flat-square&logo=express)](https://expressjs.com/)
-[![Neon](https://img.shields.io/badge/Postgres-Neon-00E599.svg?style=flat-square&logo=postgresql)](https://neon.tech/)
-[![Drizzle](https://img.shields.io/badge/ORM-Drizzle-C5F74F.svg?style=flat-square)](https://orm.drizzle.team/)
-[![OpenRouter](https://img.shields.io/badge/AI-OpenRouter_LLM-6366F1.svg?style=flat-square)](https://openrouter.ai/)
-[![Security](https://img.shields.io/badge/Security_Tests-35%2F35_Passing-success.svg?style=flat-square)](scripts/security-test.mjs)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19.1-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
+[![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/Postgres-Neon-00E599?style=for-the-badge&logo=postgresql)](https://neon.tech/)
+[![Drizzle](https://img.shields.io/badge/ORM-Drizzle-C5F74F?style=for-the-badge)](https://orm.drizzle.team/)
+[![OpenRouter](https://img.shields.io/badge/AI-OpenRouter_LLM-6366F1?style=for-the-badge)](https://openrouter.ai/)
+[![Security Tests](https://img.shields.io/badge/Security_Tests-35%2F35_Passing-22c55e?style=for-the-badge)](scripts/security-test.mjs)
 
-**Turn failed transactions into recovered ARR with AI-driven root cause diagnosis, smart payment retries, and high-converting omnichannel recovery workflows.**
+---
 
-[Key Features](#-key-features) • [Architecture](#-architecture) • [Project Structure](#-project-structure) • [Tech Stack](#%EF%B8%8F-technology-stack) • [Quick Start](#-quick-start) • [Security & Testing](#-security--testing-suite) • [API Reference](#-api-endpoints)
+## 📑 Table of Contents
 
-</div>
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Technology Stack](#-technology-stack)
+- [Quick Start](#-quick-start)
+- [Security & Testing Suite](#-security--testing-suite)
+- [API Endpoints](#-api-endpoints)
+- [License](#-license)
 
 ---
 
@@ -54,7 +62,7 @@ Whether communicating via **WhatsApp UPI 1-click links**, personalized **SMS ale
 
 ## 🏗️ Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │               Frontend: Vite + React 19 SPA                 │
 │         (Tailwind CSS v4 • Lucide Icons • Wouter)           │
@@ -80,13 +88,12 @@ Whether communicating via **WhatsApp UPI 1-click links**, personalized **SMS ale
 
 ## 📁 Project Structure
 
-```
+```text
+revenue-recovery-ai/
 ├── artifacts/
 │   ├── api-server/                 # Express 5 backend server
 │   │   ├── src/routes/             # API routes & webhook endpoints
 │   │   ├── src/lib/                # Core libraries, logger & environment
-│   │   │   ├── phase3/             # LLM analyzer, strategy queues & orchestrator
-│   │   │   └── phase4/             # Notification adapters & template engines
 │   │   └── src/index.ts            # Server entrypoint
 │   └── revenue-recovery-dashboard/ # React 19 + Vite frontend
 │       ├── src/components/         # Reusable UI components & layouts
@@ -109,7 +116,7 @@ Whether communicating via **WhatsApp UPI 1-click links**, personalized **SMS ale
 | **Frontend** | React 19, TypeScript, Tailwind CSS v4, Radix UI, Lucide Icons, Wouter Router, TanStack Query |
 | **Backend** | Node.js, Express 5, TypeScript, Zod, Pino Logger |
 | **Database** | Neon Serverless PostgreSQL, Drizzle ORM, Drizzle Kit |
-| **AI Intelligence**| OpenRouter API (Meta Llama 3.3 70B Instruct) with Deterministic Rule Engine Fallback |
+| **AI Intelligence** | OpenRouter API (Meta Llama 3.3 70B Instruct) with Deterministic Rule Engine Fallback |
 | **Payment & Comms** | Razorpay, Twilio, Exotel, SendGrid, AWS SES (with Native Sandbox Simulation) |
 
 ---
@@ -122,9 +129,10 @@ Whether communicating via **WhatsApp UPI 1-click links**, personalized **SMS ale
 - **PostgreSQL**: A Neon database URL (or standard PostgreSQL instance)
 
 ### 1. Clone & Install Dependencies
+
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/revenue-recovery-ai.git
+git clone https://github.com/Vandan-726/revenue-recovery-ai.git
 cd revenue-recovery-ai
 
 # Install dependencies using pnpm
@@ -132,12 +140,15 @@ pnpm install
 ```
 
 ### 2. Configure Environment Variables
+
 Create your local development configuration from the template:
+
 ```bash
 cp .env.example .env.development.local
 ```
 
 Open `.env.development.local` and configure your credentials:
+
 ```env
 # Server Runtime
 PORT=3000
@@ -160,13 +171,17 @@ RAZORPAY_WEBHOOK_SECRET=
 ```
 
 ### 3. Initialize Database Schema
+
 Sync your database with the Drizzle ORM schema:
+
 ```bash
 pnpm db:push
 ```
 
 ### 4. Start Local Development
+
 Start both the Express API backend and Vite React dashboard in parallel:
+
 ```bash
 pnpm dev
 ```
@@ -184,17 +199,20 @@ Recoverly AI includes two automated security testing suites built specifically f
 
 ### Run Standard Security Audit (27 Checks)
 Tests webhook signatures, JSON parsing, injection defenses, and header security:
+
 ```bash
 pnpm test:security
 ```
 
 ### Run Advanced Hardened Security Suite (8 Deep Checks)
 Performs stress testing across Prototype Pollution, Webhook Replay Attacks, Mass Assignment, HTTP Verb Tampering, and DoS Payload limits:
+
 ```bash
 pnpm test:security:advanced
 ```
 
 ### Run Smoke Tests & Health Checks
+
 ```bash
 pnpm smoke-test
 ```
@@ -212,7 +230,7 @@ All core API endpoints are prefixed with `/api`.
 | `GET` | `/api/v1/recoveries` | Paginated recovery records with filtering & search |
 | `GET` | `/api/v1/recoveries/:id` | Detailed recovery timeline, customer data, and audit history |
 | `POST` | `/api/v1/recoveries/:id/analyze` | Triggers synchronous AI root-cause analysis & strategy selection |
-| `GET` | `/api/v1/recoveries/:id/analysis`| Retrieves stored LLM analysis and action plan |
+| `GET` | `/api/v1/recoveries/:id/analysis` | Retrieves stored LLM analysis and action plan |
 | `POST` | `/api/v1/webhooks/razorpay` | Receives incoming payment failure events (HMAC verified) |
 | `GET` | `/api/v1/settings` | Fetches workspace configurations and provider connection state |
 | `PUT` | `/api/v1/settings` | Updates profile, currency, max retry limits, and alerts |
@@ -225,6 +243,3 @@ All core API endpoints are prefixed with `/api`.
 ## 📜 License
 
 This project is licensed under the [MIT License](LICENSE).
-#   r e v e n u e - r e c o v e r y - a i  
- #   r e v e n u e - r e c o v e r y - a i  
- 
