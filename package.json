@@ -4,7 +4,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock'",
     "dev": "node ./scripts-dev/dev.mjs",
     "dev:api": "tsx watch artifacts/api-server/src/index.ts",
     "dev:web": "pnpm --filter @workspace/revenue-recovery-dashboard run dev",
