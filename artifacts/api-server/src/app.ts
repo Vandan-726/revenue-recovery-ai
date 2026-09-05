@@ -59,7 +59,7 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+app.use(["/api", "/"], router);
 
 app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({ err, requestId: req.id }, "Unhandled request error");
