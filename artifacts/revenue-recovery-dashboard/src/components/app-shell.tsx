@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="noise min-h-[100dvh] bg-background">
       <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-background text-foreground border-r border-border md:border-r-0 md:bg-sidebar md:text-sidebar-foreground transition-all duration-300 ${collapsed ? 'w-[248px] md:w-[76px] -translate-x-full md:translate-x-0' : 'w-[248px] -translate-x-full md:translate-x-0'} ${mobileOpen ? '!translate-x-0 shadow-2xl' : ''}`}>
-        <div className="flex h-[86px] items-center border-b border-border md:border-sidebar-border px-5">
+        <div className="flex h-[72px] items-center border-b border-border md:border-sidebar-border px-5">
           <Link href="/dashboard" onClick={closeMobile} className="flex items-center gap-3" data-testid="link-brand">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_0_0_4px_hsl(var(--sidebar-primary)_/_0.2)]"><ShieldCheck size={21} strokeWidth={2.5} /></span>
             <span className={`overflow-hidden whitespace-nowrap text-[15px] font-bold tracking-tight transition-all ${collapsed ? 'md:w-0 md:opacity-0' : ''}`}>recover<span className="text-sidebar-primary">ly</span></span>
@@ -65,10 +65,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       {mobileOpen && <button className="fixed inset-0 z-30 bg-black/40 transition-opacity duration-200 md:hidden" onClick={closeMobile} aria-label="Close menu" data-testid="button-overlay" />}
       <main className={`min-h-[100dvh] w-full max-w-full overflow-x-hidden min-w-0 transition-[padding-left] duration-300 pl-0 ${collapsed ? 'md:pl-[76px]' : 'md:pl-[248px]'}`}>
-        <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-md md:px-9">
-          <button onClick={() => setMobileOpen(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted md:hidden" aria-label="Open navigation" data-testid="button-open-nav"><Menu size={21} /></button>
-          <div className="hidden items-center gap-2 text-xs text-muted-foreground md:flex"><CreditCard size={15} /><span>Workspace / </span><strong className="text-foreground">Revenue operations</strong></div>
-          <div className="ml-auto flex items-center gap-3">
+        <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-border/80 bg-background/90 px-3.5 sm:px-5 backdrop-blur-md md:px-9 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted md:hidden shrink-0" aria-label="Open navigation" data-testid="button-open-nav"><Menu size={21} /></button>
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground min-w-0 truncate">
+              <CreditCard size={15} className="shrink-0" />
+              <span className="hidden sm:inline">Workspace / </span>
+              <strong className="text-foreground truncate">Revenue operations</strong>
+            </div>
+          </div>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
             {isStreaming && (
               <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary animate-in fade-in duration-200">
                 <span className="size-2 rounded-full bg-primary animate-pulse" />
