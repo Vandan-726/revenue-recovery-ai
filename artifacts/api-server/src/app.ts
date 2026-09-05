@@ -17,10 +17,11 @@ const app: Express = express();
 
 app.use((req, res, next) => {
   if (["TRACE", "CONNECT", "PURGE"].includes(req.method)) {
-    return res.status(405).json({
+    res.status(405).json({
       error: "method_not_allowed",
       message: `HTTP method ${req.method} is strictly prohibited.`,
     });
+    return;
   }
   next();
 });

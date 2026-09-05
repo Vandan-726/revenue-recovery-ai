@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setMobileOpen(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted md:hidden" aria-label="Open navigation" data-testid="button-open-nav"><Menu size={21} /></button>
           <div className="hidden items-center gap-2 text-xs text-muted-foreground md:flex"><CreditCard size={15} /><span>Workspace / </span><strong className="text-foreground">Revenue operations</strong></div>
           <div className="ml-auto flex items-center gap-3">
-            <span className="hidden rounded-full border border-border bg-card px-3 py-1.5 font-mono text-[10px] text-muted-foreground sm:inline-flex">LIVE DATA · {(settings.data?.account?.timezone || 'Asia/Kolkata').split('/').pop()?.replace('_', ' ') || 'IST'}</span>
+            <span className="hidden rounded-full border border-border bg-card px-3 py-1.5 font-mono text-[10px] text-muted-foreground sm:inline-flex">LIVE DATA · {String(settings.data?.account?.timezone || 'Asia/Kolkata').split('/').pop()?.replace('_', ' ') || 'IST'}</span>
             <Link href="/settings" className="grid size-9 place-items-center rounded-full border border-border bg-card text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted" aria-label="Open profile settings" data-testid="button-account-menu" title="Profile & Account Settings">{userInitials}</Link>
           </div>
         </header>
