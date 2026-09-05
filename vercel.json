@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install -g pnpm && pnpm install",
-  "buildCommand": "pnpm --filter @workspace/revenue-recovery-dashboard build && cp -r artifacts/revenue-recovery-dashboard/dist public",
+  "buildCommand": "pnpm --filter @workspace/revenue-recovery-dashboard build",
   "outputDirectory": "public",
   "rewrites": [
     {
