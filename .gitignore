@@ -5,8 +5,7 @@ dist
 tmp
 out-tsc
 /public
-artifacts/revenue-recovery-dashboard/public/index.html
-artifacts/revenue-recovery-dashboard/public/assets
+artifacts/revenue-recovery-dashboard/public
 *.tsbuildinfo
 .expo
 .expo-shared
