@@ -1,0 +1,1216 @@
+# Phase 2: Backend API & Webhook Handler PRD
+## Core API Server & Webhook Processing
+
+---
+
+## 1. PHASE OVERVIEW
+
+**Phase**: 02 - Backend API & Webhook Handler  
+**Duration**: 3-4 weeks  
+**Dependencies**: Phase 1 (Frontend types & routes)  
+**Outputs**: FastAPI server, webhook processing, basic CRUD APIs  
+
+### Objectives
+- ✅ Setup FastAPI project structure
+- ✅ Implement Razorpay webhook receiver & validator
+- ✅ Build payment failure detection system
+- ✅ Create event storage in PostgreSQL
+- ✅ Implement basic CRUD APIs for frontend
+- ✅ Setup error handling & logging
+- ✅ Database migrations & models
+
+---
+
+## 2. TECHNOLOGY STACK
+
+**Framework**: FastAPI 0.104+  
+**Database**: PostgreSQL 14+  
+**ORM**: SQLAlchemy 2.0+  
+**Task Queue**: Celery (prepared, tasks handled in Phase 3)  
+**Cache**: Redis  
+**Testing**: pytest  
+**Deployment**: Docker  
+
+---
+
+## 3. PROJECT STRUCTURE
+
+```
+revenue-recovery-backend/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI app init
+│   ├── config.py               # Settings & config
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── router.py           # Main router (combines all routes)
+│   │   ├── v1/
+│   │   │   ├── __init__.py
+│   │   │   ├── endpoints/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── dashboard.py        # GET /api/v1/dashboard/metrics
+│   │   │   │   ├── recoveries.py       # GET/POST /api/v1/recoveries
+│   │   │   │   ├── analytics.py        # GET /api/v1/analytics
+│   │   │   │   ├── settings.py         # GET/PUT /api/v1/settings
+│   │   │   │   ├── webhooks.py         # POST /api/v1/webhooks/razorpay
+│   │   │   │   └── health.py           # GET /health
+│   │   │   └── dependencies.py         # Common dependencies
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── database.py         # Database connection
+│   │   ├── payment.py          # Payment model
+│   │   ├── recovery.py         # Recovery model
+│   │   ├── event.py            # Event model
+│   │   ├── audit_log.py        # Audit log model
+│   │   └── customer.py         # Customer model (optional)
+│   │
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   ├── recovery.py         # Pydantic schemas
+│   │   ├── webhook.py          # Webhook schemas
+│   │   ├── payment.py          # Payment schemas
+│   │   └── common.py           # Common schemas
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── webhook_handler.py  # Webhook processing logic
+│   │   ├── event_processor.py  # Event processing
+│   │   ├── payment_service.py  # Payment operations
+│   │   ├── recovery_service.py # Recovery operations (prepared for Phase 3)
+│   │   └── analytics_service.py # Analytics queries
+│   │
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── razorpay_client.py  # Razorpay SDK wrapper
+│   │   ├── logger.py           # Logging setup
+│   │   ├── validators.py       # Input validation
+│   │   └── helpers.py          # Utility functions
+│   │
+│   └── middleware/
+│       ├── __init__.py
+│       ├── error_handler.py    # Global error handling
+│       └── logging.py          # Request logging
+│
+├── migrations/
+│   ├── versions/
+│   │   ├── 001_initial_schema.sql
+│   │   ├── 002_add_audit_logs.sql
+│   │   └── ...
+│   └── alembic.ini
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_webhooks.py
+│   ├── test_payments.py
+│   ├── test_recoveries.py
+│   └── conftest.py
+│
+├── .env.example
+├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── pytest.ini
+├── README.md
+└── main.py (entry point)
+```
+
+---
+
+## 4. DATABASE SCHEMA
+
+### 4.1 Events Table
+```sql
+CREATE TABLE events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(50) NOT NULL,  -- payment.failed, payment.authorized, order.paid
+    customer_id VARCHAR(50),
+    payment_id VARCHAR(50),
+    order_id VARCHAR(50),
+    amount BIGINT,  -- in paise
+    currency VARCHAR(3) DEFAULT 'INR',
+    error_code VARCHAR(100),
+    error_description TEXT,
+    metadata JSONB,  -- Store complete webhook payload
+    status VARCHAR(20) DEFAULT 'pending',  -- pending, processed, failed
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP
+);
+
+CREATE INDEX idx_events_payment_id ON events(payment_id);
+CREATE INDEX idx_events_customer_id ON events(customer_id);
+CREATE INDEX idx_events_status ON events(status);
+CREATE INDEX idx_events_created_at ON events(created_at DESC);
+```
+
+### 4.2 Payments Table
+```sql
+CREATE TABLE payments (
+    id VARCHAR(50) PRIMARY KEY,  -- Razorpay payment_id
+    order_id VARCHAR(50),
+    customer_id VARCHAR(50),
+    amount BIGINT,  -- in paise
+    currency VARCHAR(3) DEFAULT 'INR',
+    status VARCHAR(20),  -- created, authorized, captured, failed
+    method VARCHAR(20),  -- card, netbanking, wallet, emi
+    error_code VARCHAR(100),
+    error_description TEXT,
+    razorpay_response JSONB,  -- Store complete response
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_payments_customer_id ON payments(customer_id);
+CREATE INDEX idx_payments_status ON payments(status);
+```
+
+### 4.3 Recoveries Table
+```sql
+CREATE TABLE recoveries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(50) NOT NULL REFERENCES payments(id),
+    event_id UUID REFERENCES events(id),
+    customer_id VARCHAR(50),
+    amount BIGINT,
+    root_cause VARCHAR(255),  -- Why it failed
+    status VARCHAR(20) DEFAULT 'pending',  -- pending, in_progress, success, failed
+    strategies JSONB,  -- Array of recovery strategies
+    selected_strategy VARCHAR(50),  -- Current active strategy
+    max_attempts INT DEFAULT 3,
+    attempts_used INT DEFAULT 0,
+    recovered_at TIMESTAMP,
+    recovery_amount BIGINT,  -- Amount actually recovered
+    revenue_impact BIGINT,  -- Net revenue gain/loss
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_recoveries_payment_id ON recoveries(payment_id);
+CREATE INDEX idx_recoveries_customer_id ON recoveries(customer_id);
+CREATE INDEX idx_recoveries_status ON recoveries(status);
+```
+
+### 4.4 Recovery Attempts Table
+```sql
+CREATE TABLE recovery_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recovery_id UUID NOT NULL REFERENCES recoveries(id),
+    payment_id VARCHAR(50),
+    action_type VARCHAR(50),  -- retry, sms, email, discount, call
+    status VARCHAR(20),  -- pending, executed, success, failed
+    attempt_number INT,
+    scheduled_for TIMESTAMP,
+    executed_at TIMESTAMP,
+    result JSONB,  -- Response from action
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_recovery_attempts_recovery_id ON recovery_attempts(recovery_id);
+CREATE INDEX idx_recovery_attempts_status ON recovery_attempts(status);
+```
+
+### 4.5 Audit Logs Table
+```sql
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(50),
+    recovery_id UUID,
+    action VARCHAR(255),  -- Payment failed, Recovery initiated, etc.
+    actor VARCHAR(100),  -- System, User, AI-Agent
+    details JSONB,  -- Detailed info about action
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_audit_logs_payment_id ON audit_logs(payment_id);
+CREATE INDEX idx_audit_logs_recovery_id ON audit_logs(recovery_id);
+```
+
+### 4.6 Settings Table (Optional)
+```sql
+CREATE TABLE settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR(50),
+    key VARCHAR(100),  -- max_retry_attempts, max_discount, etc.
+    value TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+UNIQUE(user_id, key);
+```
+
+---
+
+## 5. DATABASE MODELS (SQLAlchemy)
+
+### 5.1 Payment Model
+```python
+# app/models/payment.py
+from sqlalchemy import Column, String, Integer, DateTime, JSON, Enum
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime
+import uuid
+
+Base = declarative_base()
+
+class Payment(Base):
+    __tablename__ = "payments"
+    
+    id = Column(String(50), primary_key=True)  # Razorpay payment_id
+    order_id = Column(String(50), index=True)
+    customer_id = Column(String(50), index=True)
+    amount = Column(Integer)  # in paise
+    currency = Column(String(3), default='INR')
+    status = Column(String(20), index=True)
+    method = Column(String(20))
+    error_code = Column(String(100), nullable=True)
+    error_description = Column(String(255), nullable=True)
+    razorpay_response = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+### 5.2 Event Model
+```python
+# app/models/event.py
+from sqlalchemy import Column, String, Integer, DateTime, JSON, Enum
+from datetime import datetime
+import uuid
+from enum import Enum as PyEnum
+
+class EventType(PyEnum):
+    PAYMENT_FAILED = "payment.failed"
+    PAYMENT_AUTHORIZED = "payment.authorized"
+    PAYMENT_CAPTURED = "payment.captured"
+    ORDER_PAID = "order.paid"
+    ORDER_PENDING = "order.pending"
+
+class EventStatus(PyEnum):
+    PENDING = "pending"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+class Event(Base):
+    __tablename__ = "events"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type = Column(String(50), nullable=False, index=True)
+    customer_id = Column(String(50), index=True)
+    payment_id = Column(String(50), index=True)
+    order_id = Column(String(50))
+    amount = Column(Integer)
+    currency = Column(String(3))
+    error_code = Column(String(100), nullable=True)
+    error_description = Column(String(255), nullable=True)
+    metadata = Column(JSON)  # Store complete webhook payload
+    status = Column(String(20), default='pending', index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+```
+
+### 5.3 Recovery Model
+```python
+# app/models/recovery.py
+class RecoveryStatus(PyEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    SUCCESS = "success"
+    FAILED = "failed"
+
+class Recovery(Base):
+    __tablename__ = "recoveries"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    payment_id = Column(String(50), ForeignKey('payments.id'), nullable=False, index=True)
+    event_id = Column(String(36), ForeignKey('events.id'))
+    customer_id = Column(String(50), index=True)
+    amount = Column(Integer)
+    root_cause = Column(String(255), nullable=True)
+    status = Column(String(20), default='pending', index=True)
+    strategies = Column(JSON)  # Array of recovery strategies
+    selected_strategy = Column(String(50), nullable=True)
+    max_attempts = Column(Integer, default=3)
+    attempts_used = Column(Integer, default=0)
+    recovered_at = Column(DateTime, nullable=True)
+    recovery_amount = Column(Integer, nullable=True)
+    revenue_impact = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+### 5.4 Audit Log Model
+```python
+# app/models/audit_log.py
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    payment_id = Column(String(50), index=True)
+    recovery_id = Column(String(36))
+    action = Column(String(255))
+    actor = Column(String(100))  # System, User, AI-Agent
+    details = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+```
+
+---
+
+## 6. PYDANTIC SCHEMAS
+
+### 6.1 Webhook Schemas
+```python
+# app/schemas/webhook.py
+from pydantic import BaseModel
+from typing import Optional, Any, Dict
+from datetime import datetime
+
+class RazorpayWebhookPayload(BaseModel):
+    event: str  # payment.failed, order.paid
+    payload: Dict[str, Any]
+    created_at: int
+
+class PaymentEntity(BaseModel):
+    id: str
+    customer_id: Optional[str]
+    order_id: Optional[str]
+    amount: int
+    currency: str
+    status: str
+    method: Optional[str]
+    error_code: Optional[str]
+    error_description: Optional[str]
+    created_at: int
+
+class OrderEntity(BaseModel):
+    id: str
+    customer_id: Optional[str]
+    amount: int
+    currency: str
+    status: str
+    payments: Optional[Dict[str, Any]]
+```
+
+### 6.2 Recovery Schemas
+```python
+# app/schemas/recovery.py
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+class RecoveryCreate(BaseModel):
+    payment_id: str
+    customer_id: str
+    amount: int
+    error_code: str
+    error_description: str
+
+class RecoveryResponse(BaseModel):
+    id: str
+    payment_id: str
+    customer_id: str
+    amount: int
+    status: str
+    strategies: List[str]
+    selected_strategy: Optional[str]
+    attempts_used: int
+    max_attempts: int
+    recovery_amount: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class RecoveryListResponse(BaseModel):
+    items: List[RecoveryResponse]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+class RecoveryDetailResponse(RecoveryResponse):
+    timeline: List[Dict[str, Any]]
+    audit_logs: List[Dict[str, Any]]
+```
+
+### 6.3 Dashboard Schemas
+```python
+# app/schemas/dashboard.py
+from pydantic import BaseModel
+from typing import Optional
+
+class MetricCard(BaseModel):
+    failures_detected: int
+    recovery_attempts: int
+    successful_recoveries: int
+    recovery_rate: float
+    revenue_at_risk: int
+    revenue_recovered: int
+    roi: float
+
+class RecoveryFunnelData(BaseModel):
+    detected: int
+    attempted: int
+    successful: int
+
+class DashboardResponse(BaseModel):
+    metrics: MetricCard
+    funnel: RecoveryFunnelData
+    recent_recoveries: List[RecoveryResponse]
+```
+
+---
+
+## 7. API ENDPOINTS
+
+### 7.1 Webhook Endpoint
+
+**POST** `/api/v1/webhooks/razorpay`
+
+```python
+# app/api/v1/endpoints/webhooks.py
+from fastapi import APIRouter, Request, HTTPException, status
+from app.services.webhook_handler import handle_razorpay_webhook
+import hmac
+import hashlib
+import json
+
+router = APIRouter()
+
+@router.post("/razorpay")
+async def razorpay_webhook(request: Request):
+    """
+    Handle Razorpay webhook events
+    
+    Validates signature, processes event, stores in DB
+    """
+    body = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature")
+    
+    # Validate signature
+    expected_signature = hmac.new(
+        settings.RAZORPAY_WEBHOOK_SECRET.encode(),
+        body,
+        hashlib.sha256
+    ).hexdigest()
+    
+    if signature != expected_signature:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    data = json.loads(body)
+    
+    try:
+        result = await handle_razorpay_webhook(data)
+        return {
+            "status": "ok",
+            "event_id": result.get("event_id"),
+            "message": "Webhook processed successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### 7.2 Dashboard Endpoint
+
+**GET** `/api/v1/dashboard/metrics`
+
+```python
+# app/api/v1/endpoints/dashboard.py
+from fastapi import APIRouter, Depends
+from app.services.analytics_service import get_dashboard_metrics
+from sqlalchemy.orm import Session
+from app.models.database import get_db
+
+router = APIRouter()
+
+@router.get("/metrics", response_model=DashboardResponse)
+async def get_dashboard(
+    days: int = 30,
+    db: Session = Depends(get_db)
+):
+    """
+    Get dashboard metrics for last N days
+    """
+    return await get_dashboard_metrics(db, days)
+```
+
+### 7.3 Recoveries Endpoints
+
+**GET** `/api/v1/recoveries`
+
+```python
+# app/api/v1/endpoints/recoveries.py
+@router.get("", response_model=RecoveryListResponse)
+async def list_recoveries(
+    page: int = 1,
+    per_page: int = 10,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all recoveries with filters
+    
+    Query Parameters:
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 10)
+    - status: Filter by status (pending, in_progress, success, failed)
+    - search: Search by payment_id or customer_id
+    """
+    offset = (page - 1) * per_page
+    
+    query = db.query(Recovery)
+    
+    if status:
+        query = query.filter(Recovery.status == status)
+    
+    if search:
+        query = query.filter(
+            (Recovery.payment_id.ilike(f"%{search}%")) |
+            (Recovery.customer_id.ilike(f"%{search}%"))
+        )
+    
+    total = query.count()
+    items = query.offset(offset).limit(per_page).all()
+    
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page
+    }
+```
+
+**GET** `/api/v1/recoveries/:id`
+
+```python
+@router.get("/{recovery_id}", response_model=RecoveryDetailResponse)
+async def get_recovery_detail(
+    recovery_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed info about a specific recovery
+    """
+    recovery = db.query(Recovery).filter(Recovery.id == recovery_id).first()
+    
+    if not recovery:
+        raise HTTPException(status_code=404, detail="Recovery not found")
+    
+    # Get timeline events
+    timeline = db.query(RecoveryAttempt).filter(
+        RecoveryAttempt.recovery_id == recovery_id
+    ).order_by(RecoveryAttempt.created_at).all()
+    
+    # Get audit logs
+    audit_logs = db.query(AuditLog).filter(
+        AuditLog.recovery_id == recovery_id
+    ).order_by(AuditLog.created_at).all()
+    
+    return {
+        **recovery.__dict__,
+        "timeline": timeline,
+        "audit_logs": audit_logs
+    }
+```
+
+### 7.4 Analytics Endpoint
+
+**GET** `/api/v1/analytics`
+
+```python
+@router.get("")
+async def get_analytics(
+    start_date: Optional[str] = None,  # YYYY-MM-DD
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get analytics for date range
+    """
+    # Parse dates
+    # Query recoveries by date
+    # Calculate metrics
+    # Return formatted response
+```
+
+### 7.5 Settings Endpoints
+
+**GET** `/api/v1/settings`
+
+```python
+@router.get("")
+async def get_settings(db: Session = Depends(get_db)):
+    """Get user settings"""
+    pass
+
+@router.put("")
+async def update_settings(
+    data: SettingsUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update user settings"""
+    pass
+```
+
+---
+
+## 8. WEBHOOK HANDLER SERVICE
+
+### 8.1 Webhook Handler
+```python
+# app/services/webhook_handler.py
+from datetime import datetime
+from sqlalchemy.orm import Session
+from app.models import Event, Payment, Recovery, AuditLog
+from app.utils.logger import logger
+from app.utils.validators import validate_webhook
+import json
+
+class WebhookHandler:
+    
+    async def handle_payment_failed(
+        self,
+        data: dict,
+        db: Session
+    ) -> dict:
+        """
+        Handle payment.failed event
+        
+        1. Extract payment details
+        2. Store event in DB
+        3. Log audit trail
+        4. Trigger recovery (queued for Phase 3)
+        """
+        
+        payment_data = data['payload']['payment']['entity']
+        
+        # 1. Create/Update payment record
+        payment = Payment(
+            id=payment_data['id'],
+            order_id=payment_data.get('order_id'),
+            customer_id=payment_data.get('customer_id'),
+            amount=payment_data['amount'],
+            status=payment_data['status'],
+            error_code=payment_data.get('error_code'),
+            error_description=payment_data.get('error_description'),
+            razorpay_response=payment_data
+        )
+        db.add(payment)
+        db.flush()
+        
+        # 2. Create event record
+        event = Event(
+            event_type='payment.failed',
+            payment_id=payment_data['id'],
+            customer_id=payment_data.get('customer_id'),
+            amount=payment_data['amount'],
+            error_code=payment_data.get('error_code'),
+            error_description=payment_data.get('error_description'),
+            metadata=payment_data,
+            status='pending'
+        )
+        db.add(event)
+        db.flush()
+        
+        # 3. Create initial recovery record
+        recovery = Recovery(
+            payment_id=payment_data['id'],
+            event_id=event.id,
+            customer_id=payment_data.get('customer_id'),
+            amount=payment_data['amount'],
+            status='pending'
+        )
+        db.add(recovery)
+        db.flush()
+        
+        # 4. Log audit trail
+        audit_log = AuditLog(
+            payment_id=payment_data['id'],
+            recovery_id=recovery.id,
+            action='Payment failed',
+            actor='System',
+            details={
+                'error_code': payment_data.get('error_code'),
+                'error_description': payment_data.get('error_description')
+            }
+        )
+        db.add(audit_log)
+        
+        db.commit()
+        
+        logger.info(f"Payment {payment_data['id']} failed, recovery initiated")
+        
+        return {
+            "event_id": event.id,
+            "recovery_id": recovery.id,
+            "status": "success"
+        }
+    
+    async def handle_order_paid(self, data: dict, db: Session) -> dict:
+        """Handle order.paid event - payment successful"""
+        order_data = data['payload']['order']['entity']
+        
+        # Update payment status
+        payment = db.query(Payment).filter(
+            Payment.id == order_data.get('receipt')
+        ).first()
+        
+        if payment:
+            payment.status = 'captured'
+            db.commit()
+        
+        return {"status": "success"}
+
+async def handle_razorpay_webhook(data: dict, db: Session) -> dict:
+    """Main webhook handler dispatcher"""
+    
+    event_type = data.get('event')
+    handler = WebhookHandler()
+    
+    if event_type == 'payment.failed':
+        return await handler.handle_payment_failed(data, db)
+    elif event_type == 'order.paid':
+        return await handler.handle_order_paid(data, db)
+    else:
+        logger.warning(f"Unhandled event type: {event_type}")
+        return {"status": "ignored"}
+```
+
+---
+
+## 9. FASTAPI CONFIGURATION
+
+### 9.1 Main App Setup
+```python
+# app/main.py
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from app.config import settings
+from app.api.router import api_router
+from app.models.database import Base, engine
+from app.middleware.error_handler import global_exception_handler
+from app.middleware.logging import LoggingMiddleware
+import logging
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="Revenue Recovery AI",
+    description="AI-powered payment recovery system",
+    version="1.0.0"
+)
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Logging Middleware
+app.add_middleware(LoggingMiddleware)
+
+# Exception handlers
+app.add_exception_handler(Exception, global_exception_handler)
+
+# Include routes
+app.include_router(api_router, prefix="/api/v1")
+
+# Health check
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "revenue-recovery-api"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )
+```
+
+### 9.2 Config
+```python
+# app/config.py
+from pydantic_settings import BaseSettings
+from typing import List
+
+class Settings(BaseSettings):
+    # App
+    APP_NAME: str = "Revenue Recovery AI"
+    DEBUG: bool = False
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    
+    # Database
+    DATABASE_URL: str = "postgresql://user:password@localhost/revenue_recovery"
+    
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379"
+    
+    # Razorpay
+    RAZORPAY_KEY_ID: str
+    RAZORPAY_KEY_SECRET: str
+    RAZORPAY_WEBHOOK_SECRET: str
+    
+    # CORS
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    
+    # JWT (prepare for auth in later phase)
+    SECRET_KEY: str = "your-secret-key"
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+---
+
+## 10. DATABASE SETUP & MIGRATIONS
+
+### 10.1 Database Connection
+```python
+# app/models/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from app.config import settings
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_size=10,
+    max_overflow=20,
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+### 10.2 Initial Migration
+```sql
+-- migrations/001_initial_schema.sql
+
+-- Events table
+CREATE TABLE IF NOT EXISTS events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(50),
+    payment_id VARCHAR(50),
+    order_id VARCHAR(50),
+    amount BIGINT,
+    currency VARCHAR(3) DEFAULT 'INR',
+    error_code VARCHAR(100),
+    error_description TEXT,
+    metadata JSONB,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_payment_id ON events(payment_id);
+CREATE INDEX IF NOT EXISTS idx_events_customer_id ON events(customer_id);
+CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+
+-- Payments table
+CREATE TABLE IF NOT EXISTS payments (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    customer_id VARCHAR(50),
+    amount BIGINT,
+    currency VARCHAR(3) DEFAULT 'INR',
+    status VARCHAR(20),
+    method VARCHAR(20),
+    error_code VARCHAR(100),
+    error_description TEXT,
+    razorpay_response JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+
+-- Recoveries table
+CREATE TABLE IF NOT EXISTS recoveries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(50) NOT NULL REFERENCES payments(id),
+    event_id UUID REFERENCES events(id),
+    customer_id VARCHAR(50),
+    amount BIGINT,
+    root_cause VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending',
+    strategies JSONB,
+    selected_strategy VARCHAR(50),
+    max_attempts INT DEFAULT 3,
+    attempts_used INT DEFAULT 0,
+    recovered_at TIMESTAMP,
+    recovery_amount BIGINT,
+    revenue_impact BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_recoveries_payment_id ON recoveries(payment_id);
+CREATE INDEX IF NOT EXISTS idx_recoveries_customer_id ON recoveries(customer_id);
+CREATE INDEX IF NOT EXISTS idx_recoveries_status ON recoveries(status);
+
+-- Audit logs table
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(50),
+    recovery_id UUID,
+    action VARCHAR(255),
+    actor VARCHAR(100),
+    details JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_payment_id ON audit_logs(payment_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_recovery_id ON audit_logs(recovery_id);
+```
+
+---
+
+## 11. ERROR HANDLING & LOGGING
+
+### 11.1 Global Error Handler
+```python
+# app/middleware/error_handler.py
+from fastapi.responses import JSONResponse
+from fastapi import Request
+from app.utils.logger import logger
+
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Exception: {str(exc)}", exc_info=True)
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "message": str(exc) if settings.DEBUG else "An error occurred"
+        }
+    )
+```
+
+### 11.2 Logging Setup
+```python
+# app/utils/logger.py
+import logging
+import sys
+from app.config import settings
+
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('logs/app.log')
+    ]
+)
+
+logger = logging.getLogger(__name__)
+```
+
+---
+
+## 12. TESTING
+
+### 12.1 Test Webhook
+```python
+# tests/test_webhooks.py
+import pytest
+from app.services.webhook_handler import handle_razorpay_webhook
+from app.models import Event, Recovery
+from sqlalchemy.orm import Session
+
+@pytest.fixture
+def payment_failed_webhook():
+    return {
+        "event": "payment.failed",
+        "payload": {
+            "payment": {
+                "entity": {
+                    "id": "pay_test_123",
+                    "customer_id": "cust_123",
+                    "amount": 50000,
+                    "status": "failed",
+                    "error_code": "BAD_REQUEST_PAYMENT_DECLINED",
+                    "error_description": "Payment declined"
+                }
+            }
+        }
+    }
+
+def test_handle_payment_failed(db: Session, payment_failed_webhook):
+    result = handle_razorpay_webhook(payment_failed_webhook, db)
+    
+    assert result["status"] == "success"
+    
+    # Verify event created
+    event = db.query(Event).filter(Event.payment_id == "pay_test_123").first()
+    assert event is not None
+    assert event.status == "pending"
+    
+    # Verify recovery created
+    recovery = db.query(Recovery).filter(Recovery.payment_id == "pay_test_123").first()
+    assert recovery is not None
+```
+
+---
+
+## 13. DEPLOYMENT - DOCKER
+
+### 13.1 Dockerfile
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### 13.2 Docker Compose
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: revenue_recovery
+      POSTGRES_USER: recovery_user
+      POSTGRES_PASSWORD: recovery_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://recovery_user:recovery_pass@postgres:5432/revenue_recovery
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+```
+
+---
+
+## 14. REQUIREMENTS.TXT
+
+```
+fastapi==0.104.1
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+razorpay==1.3.0
+redis==5.0.1
+celery==5.3.4
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+alembic==1.12.1
+```
+
+---
+
+## 15. DEVELOPMENT CHECKLIST
+
+- [ ] Setup FastAPI project
+- [ ] Configure PostgreSQL database
+- [ ] Create database schema & migrations
+- [ ] Define SQLAlchemy models
+- [ ] Create Pydantic schemas
+- [ ] Implement webhook handler
+- [ ] Build CRUD endpoints for dashboard
+- [ ] Build recovery list/detail endpoints
+- [ ] Implement analytics queries
+- [ ] Add error handling & logging
+- [ ] Setup Docker & Docker Compose
+- [ ] Write unit tests for webhooks
+- [ ] Write tests for API endpoints
+- [ ] Test with real Razorpay test webhooks
+- [ ] Document API (Swagger docs auto-generated)
+- [ ] Setup CI/CD pipeline
+
+---
+
+## 16. PHASE 2 DELIVERABLES
+
+✅ FastAPI server running on port 8000  
+✅ PostgreSQL database with proper schema  
+✅ Webhook handler for payment failures  
+✅ CRUD endpoints for frontend integration  
+✅ Error handling & logging  
+✅ API documentation (auto-generated by FastAPI)  
+✅ Unit tests  
+✅ Docker setup  
+
+---
+
+## 17. CONNECTION NOTES
+
+**Frontend** → **Backend** Connection:
+
+```typescript
+// Frontend: api/utils/api.ts (prepared in Phase 1)
+const API_BASE = process.env.REACT_APP_API_URL; // http://localhost:8000/api/v1
+
+export const dashboardAPI = {
+  getMetrics: () => axios.get(`${API_BASE}/dashboard/metrics`),
+};
+
+export const recoveriesAPI = {
+  list: (filters) => axios.get(`${API_BASE}/recoveries`, { params: filters }),
+  getDetail: (id) => axios.get(`${API_BASE}/recoveries/${id}`),
+};
+```
+
+**Next Phase**: Phase 3 will connect these endpoints to trigger actual recovery workflows.
+
+---
+
+**Timeline**: 3-4 weeks  
+**Next Phase**: Phase 3 - Recovery Logic & LLM Integration

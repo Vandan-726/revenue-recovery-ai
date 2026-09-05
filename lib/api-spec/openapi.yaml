@@ -1,0 +1,590 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Revenue Recovery AI API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: dashboard
+    description: Recovery dashboard metrics
+  - name: recoveries
+    description: Recovery operations
+  - name: analytics
+    description: Recovery analytics
+  - name: settings
+    description: Account settings
+  - name: webhooks
+    description: Razorpay webhook receiver
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /health:
+    get:
+      operationId: healthCheckAlias
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /v1/dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get recovery dashboard metrics
+      parameters:
+        - $ref: "#/components/parameters/Days"
+      responses:
+        "200":
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/dashboard/metrics:
+    get:
+      operationId: getDashboardMetrics
+      tags: [dashboard]
+      summary: Get recovery dashboard metrics
+      parameters:
+        - $ref: "#/components/parameters/Days"
+      responses:
+        "200":
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/recoveries:
+    get:
+      operationId: listRecoveries
+      tags: [recoveries]
+      summary: List payment recoveries
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RecoveryStatus"
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recovery list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryListResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      operationId: createRecovery
+      tags: [recoveries]
+      summary: Create a recovery record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecoveryCreate"
+      responses:
+        "201":
+          description: Recovery created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recovery"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/recoveries/{id}:
+    get:
+      operationId: getRecovery
+      tags: [recoveries]
+      summary: Get recovery details
+      parameters:
+        - $ref: "#/components/parameters/RecoveryId"
+      responses:
+        "200":
+          description: Recovery details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/recoveries/{id}/retry:
+    post:
+      operationId: retryRecovery
+      tags: [recoveries]
+      summary: Queue a recovery retry
+      parameters:
+        - $ref: "#/components/parameters/RecoveryId"
+      responses:
+        "200":
+          description: Retry queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recovery"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Retry cannot be queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/analytics:
+    get:
+      operationId: getAnalytics
+      tags: [analytics]
+      summary: Get recovery analytics
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get recovery settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update recovery settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/webhooks/razorpay:
+    post:
+      operationId: receiveRazorpayWebhook
+      tags: [webhooks]
+      summary: Receive a Razorpay webhook
+      parameters:
+        - name: X-Razorpay-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RazorpayWebhook"
+      responses:
+        "200":
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Webhook secret is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  parameters:
+    Days:
+      name: days
+      in: query
+      schema:
+        type: number
+        minimum: 1
+        maximum: 365
+        default: 30
+    Page:
+      name: page
+      in: query
+      schema:
+        type: number
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: number
+        minimum: 1
+        maximum: 100
+        default: 25
+    RecoveryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+      required: [error, message]
+    RecoveryStatus:
+      type: string
+      enum: [active, recovered, failed, paused, exhausted]
+    RecoveryStrategy:
+      type: string
+      enum: [smart_retry, email, whatsapp, sms, support]
+    Recovery:
+      type: object
+      properties:
+        id:
+          type: string
+        payment_id:
+          type: string
+        customer_id:
+          type: string
+          nullable: true
+        amount:
+          type: number
+        currency:
+          type: string
+        root_cause:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/RecoveryStatus"
+        strategies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryStrategy"
+        selected_strategy:
+          allOf:
+            - $ref: "#/components/schemas/RecoveryStrategy"
+          nullable: true
+        attempts_used:
+          type: number
+        max_attempts:
+          type: number
+        recovery_amount:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - payment_id
+        - amount
+        - currency
+        - status
+        - strategies
+        - attempts_used
+        - max_attempts
+        - created_at
+        - updated_at
+    RecoveryCreate:
+      type: object
+      properties:
+        payment_id:
+          type: string
+        customer_id:
+          type: string
+        amount:
+          type: number
+          minimum: 1
+        currency:
+          type: string
+          default: INR
+        root_cause:
+          type: string
+        strategies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryStrategy"
+      required: [payment_id, amount]
+    RecoveryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Recovery"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+      required: [data, pagination]
+    RecoveryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Recovery"
+        - type: object
+          properties:
+            timeline:
+              type: array
+              items:
+                $ref: "#/components/schemas/TimelineEvent"
+            audit_logs:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditLog"
+          required: [timeline, audit_logs]
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required: [id, title, description, status, timestamp]
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        actor:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, action, actor, details, created_at]
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: number
+        per_page:
+          type: number
+        total:
+          type: number
+        total_pages:
+          type: number
+      required: [page, per_page, total, total_pages]
+    DashboardResponse:
+      type: object
+      properties:
+        total_failed:
+          type: number
+        total_recovered:
+          type: number
+        recovery_attempts:
+          type: number
+        recovery_rate:
+          type: number
+        revenue_at_risk:
+          type: number
+        revenue_recovered:
+          type: number
+        active_recoveries:
+          type: number
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendPoint"
+      required: [total_failed, total_recovered, recovery_attempts, recovery_rate, revenue_at_risk, revenue_recovered, active_recoveries, trend]
+    TrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        failed:
+          type: number
+        recovered:
+          type: number
+        recovered_amount:
+          type: number
+      required: [date, failed, recovered, recovered_amount]
+    AnalyticsResponse:
+      type: object
+      properties:
+        recovery_rate:
+          type: number
+        revenue_impact:
+          type: number
+        total_attempts:
+          type: number
+        successful_attempts:
+          type: number
+        strategy_performance:
+          type: object
+          additionalProperties:
+            type: number
+        cost_breakdown:
+          type: object
+          additionalProperties:
+            type: number
+        revenue_by_strategy:
+          type: object
+          additionalProperties:
+            type: number
+        top_customers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopCustomer"
+      required: [recovery_rate, revenue_impact, total_attempts, successful_attempts, strategy_performance, cost_breakdown, revenue_by_strategy, top_customers]
+    TopCustomer:
+      type: object
+      properties:
+        customer_id:
+          type: string
+        recovered_amount:
+          type: number
+        recovery_count:
+          type: number
+      required: [customer_id, recovered_amount, recovery_count]
+    Settings:
+      type: object
+      properties:
+        account:
+          type: object
+          additionalProperties: true
+        recovery:
+          type: object
+          additionalProperties: true
+        integrations:
+          type: object
+          additionalProperties: true
+      required: [account, recovery, integrations]
+    SettingsUpdate:
+      type: object
+      additionalProperties: true
+    RazorpayWebhook:
+      type: object
+      properties:
+        event:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        contains:
+          type: array
+          items:
+            type: string
+        account_id:
+          type: string
+          nullable: true
+      required: [event, payload]
+    WebhookResponse:
+      type: object
+      properties:
+        received:
+          type: boolean
+        event_id:
+          type: string
+        duplicate:
+          type: boolean
+      required: [received, event_id, duplicate]
